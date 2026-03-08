@@ -12,6 +12,7 @@ import async_timeout
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from yarl import URL
 
 from .const import CONF_LOGIN, CONF_PASSWORD, DEFAULT_SCAN_INTERVAL, DOMAIN, SESSION_TTL_SECONDS
 
@@ -31,7 +32,15 @@ class EuroNetAuthError(EuroNetApiError):
 def _short_payload(payload: dict[str, Any]) -> str:
     """Return sanitized payload details for logging."""
     result = payload.get("result")
-    result_preview = str(result)[:120] if result is not None else "<missing>"
+    if isinstance(result, dict):
+        result_preview = f"<dict keys={list(result.keys())[:8]}>"
+    elif isinstance(result, list):
+        result_preview = f"<list len={len(result)}>"
+    elif result is None:
+        result_preview = "<missing>"
+    else:
+        result_preview = str(result)[:120]
+
     return f"keys={list(payload.keys())}, result={result_preview!r}, has_ses={bool(payload.get('ses'))}"
 
 
@@ -70,6 +79,23 @@ class EuroNetApiClient:
 
         return payload
 
+    def _extract_noses(self, payload: dict[str, Any], response: Any) -> str | None:
+        """Extract noses session token from payload, response cookies, or cookie jar."""
+        token = payload.get("ses")
+        if isinstance(token, str) and token:
+            return token
+
+        response_cookie = response.cookies.get("noses")
+        if response_cookie and response_cookie.value:
+            return response_cookie.value
+
+        jar_cookies = self._session.cookie_jar.filter_cookies(URL(BASE_URL))
+        jar_cookie = jar_cookies.get("noses")
+        if jar_cookie and jar_cookie.value:
+            return jar_cookie.value
+
+        return None
+
     async def _authenticate(self) -> None:
         params = {"_uu": self.login, "_pp": self._password}
         _LOGGER.debug("Authenticating EuroNet login=%s", self.login)
@@ -81,25 +107,24 @@ class EuroNetApiClient:
             _LOGGER.error("Auth HTTP error for login=%s: status=%s", self.login, response.status)
             raise EuroNetApiError(f"Authentication failed with HTTP {response.status}")
 
-        noses = payload.get("ses")
         result = str(payload.get("result", "")).strip().lower()
+        has_inline_main = isinstance(payload.get("usr"), dict) or isinstance(payload.get("services"), list)
 
-        # Must follow API contract: auth succeeds only when `result` is auth ok.
-        if result != "auth ok":
+        if result != "auth ok" and not has_inline_main:
+            _LOGGER.warning("Auth rejected for login=%s. %s", self.login, _short_payload(payload))
+            raise EuroNetAuthError("Authentication failed: invalid credentials")
+
+        noses = self._extract_noses(payload, response)
+        if not noses:
             _LOGGER.warning(
-                "Auth rejected for login=%s. %s",
+                "Auth completed for login=%s but no noses token found; relying on session cookie jar. %s",
                 self.login,
                 _short_payload(payload),
             )
-            raise EuroNetAuthError("Authentication failed: invalid credentials")
+        else:
+            self._noses = noses
+            _LOGGER.debug("Auth OK for login=%s, session token available", self.login)
 
-        if not isinstance(noses, str) or not noses:
-            _LOGGER.error("Auth succeeded without session token for login=%s. %s", self.login, _short_payload(payload))
-            raise EuroNetApiError("Authentication failed: session token is missing")
-
-        _LOGGER.debug("Auth OK for login=%s, session token received", self.login)
-
-        self._noses = noses
         self._expires_at = datetime.utcnow() + timedelta(seconds=SESSION_TTL_SECONDS - 60)
 
     async def async_validate_auth(self) -> None:
@@ -107,17 +132,15 @@ class EuroNetApiClient:
         await self._authenticate()
 
     async def _ensure_session(self) -> None:
-        if self._noses and self._expires_at and datetime.utcnow() < self._expires_at:
+        if self._expires_at and datetime.utcnow() < self._expires_at:
             return
         await self._authenticate()
 
     async def _fetch_main_payload(self) -> dict[str, Any]:
-        assert self._noses is not None
-
-        cookies = {"noses": self._noses}
         params = {"a": "u_main"}
+        cookies = {"noses": self._noses} if self._noses else None
 
-        _LOGGER.debug("Fetching u_main for login=%s", self.login)
+        _LOGGER.debug("Fetching u_main for login=%s (explicit_noses=%s)", self.login, bool(self._noses))
         async with async_timeout.timeout(15):
             response = await self._session.get(BASE_URL, params=params, cookies=cookies)
             payload = await self._read_json_payload(response)
@@ -135,7 +158,6 @@ class EuroNetApiClient:
         payload = await self._fetch_main_payload()
         result = payload.get("result")
 
-        # If session became invalid between requests, refresh token once and retry.
         if not isinstance(result, dict):
             result_text = str(result).strip().lower()
             if "auth" in result_text or "session" in result_text:
@@ -145,7 +167,6 @@ class EuroNetApiClient:
                 payload = await self._fetch_main_payload()
                 result = payload.get("result")
 
-        # EuroNet payload may vary; support result/data/root styles.
         if isinstance(result, dict):
             container = result
         elif isinstance(payload.get("data"), dict):
