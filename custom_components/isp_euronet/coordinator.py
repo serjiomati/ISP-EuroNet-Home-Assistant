@@ -77,6 +77,7 @@ class EuroNetApiClient:
 
         # Must follow API contract: auth succeeds only when `result` is auth ok.
         if result != "auth ok":
+            _LOGGER.debug("Auth response for login %s was not auth ok: %s", self.login, result)
             raise EuroNetAuthError("Authentication failed: invalid credentials")
 
         if not isinstance(noses, str) or not noses:
@@ -107,6 +108,7 @@ class EuroNetApiClient:
         if response.status != 200:
             raise EuroNetApiError(f"Failed to fetch main data with HTTP {response.status}")
 
+        _LOGGER.debug("u_main payload keys for login %s: %s", self.login, list(payload.keys()))
         return payload
 
     async def async_get_main(self) -> EuroNetData:
@@ -117,17 +119,33 @@ class EuroNetApiClient:
 
         # If session became invalid between requests, refresh token once and retry.
         if not isinstance(result, dict):
-            self._noses = None
-            self._expires_at = None
-            await self._authenticate()
-            payload = await self._fetch_main_payload()
-            result = payload.get("result")
+            result_text = str(result).strip().lower()
+            if "auth" in result_text or "session" in result_text:
+                self._noses = None
+                self._expires_at = None
+                await self._authenticate()
+                payload = await self._fetch_main_payload()
+                result = payload.get("result")
 
-        if not isinstance(result, dict):
-            raise EuroNetApiError("Unexpected API payload: missing 'result' object")
+        # EuroNet payload may vary; support result/data/root styles.
+        if isinstance(result, dict):
+            container = result
+        elif isinstance(payload.get("data"), dict):
+            container = payload["data"]
+        else:
+            container = payload if isinstance(payload, dict) else {}
 
-        user = result.get("usr") or {}
-        services = result.get("services") or []
+        user = container.get("usr") or {}
+        services = container.get("services") or []
+
+        if not isinstance(user, dict):
+            user = {}
+        if not isinstance(services, list):
+            services = []
+
+        if not user and not services:
+            raise EuroNetApiError("Unexpected API payload: missing user/services data")
+
         return EuroNetData(user=user, services=services)
 
 
