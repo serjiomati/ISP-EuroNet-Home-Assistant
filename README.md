@@ -88,7 +88,9 @@ cards:
 
 - `services[].title`
 - `services[].next_service_price`
+- `services[].time_left`
 - `services[].human_time`
+- `services[].billing_at`
 - `services[].description`
 
 ## Технічні деталі

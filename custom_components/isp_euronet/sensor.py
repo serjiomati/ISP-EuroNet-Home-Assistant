@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -29,6 +29,13 @@ def _to_float(value: Any) -> float | None:
         return None
 
 
+def _to_int(value: Any) -> int | None:
+    try:
+        return int(str(value))
+    except (TypeError, ValueError):
+        return None
+
+
 def _parse_human_time(value: str | None) -> datetime | None:
     if not value:
         return None
@@ -44,6 +51,23 @@ def _parse_human_time(value: str | None) -> datetime | None:
     return naive_dt.replace(tzinfo=local_tz)
 
 
+def _time_left_to_datetime(value: Any) -> datetime | None:
+    seconds = _to_int(value)
+    if seconds is None or seconds < 0:
+        return None
+
+    return dt_util.as_local(dt_util.utcnow() + timedelta(seconds=seconds))
+
+
+def _service_due_datetime(service: dict[str, Any]) -> datetime | None:
+    # `time_left` is a more accurate source for next write-off than `human_time`.
+    due_from_time_left = _time_left_to_datetime(service.get("time_left"))
+    if due_from_time_left is not None:
+        return due_from_time_left
+
+    return _parse_human_time(service.get("human_time"))
+
+
 def _pick_primary_service(services: list[dict[str, Any]]) -> dict[str, Any]:
     if not services:
         return {}
@@ -52,7 +76,7 @@ def _pick_primary_service(services: list[dict[str, Any]]) -> dict[str, Any]:
     candidates = paid_services or services
 
     def sort_key(service: dict[str, Any]) -> tuple[int, float]:
-        service_dt = _parse_human_time(service.get("human_time"))
+        service_dt = _service_due_datetime(service)
         service_ts = service_dt.timestamp() if service_dt else float("inf")
         return (0 if service_dt else 1, service_ts)
 
@@ -62,12 +86,15 @@ def _pick_primary_service(services: list[dict[str, Any]]) -> dict[str, Any]:
 def _services_attribute(services: list[dict[str, Any]]) -> list[dict[str, Any]]:
     normalized: list[dict[str, Any]] = []
     for service in services:
+        due_dt = _service_due_datetime(service)
         normalized.append(
             {
                 "title": service.get("title"),
                 "description": service.get("description"),
                 "next_service_price": _to_float(service.get("next_service_price")),
+                "time_left": _to_int(service.get("time_left")),
                 "human_time": service.get("human_time"),
+                "billing_at": due_dt.isoformat() if due_dt else None,
             }
         )
     return normalized
@@ -140,7 +167,7 @@ class EuroNetSensor(CoordinatorEntity[EuroNetDataUpdateCoordinator], SensorEntit
         if self.entity_description.key == "next_write_off_amount":
             return _to_float(service.get("next_service_price"))
         if self.entity_description.key == "next_write_off_date":
-            return _parse_human_time(service.get("human_time"))
+            return _service_due_datetime(service)
         return None
 
     @property
