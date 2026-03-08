@@ -8,7 +8,7 @@ from typing import Any
 
 from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CURRENCY_HRYVNIA
+from homeassistant.const import UnitOfCurrency
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -37,13 +37,13 @@ SENSORS: tuple[SensorEntityDescription, ...] = (
     SensorEntityDescription(
         key="balance",
         name="EuroNet Balance",
-        native_unit_of_measurement=CURRENCY_HRYVNIA,
+        native_unit_of_measurement=UnitOfCurrency.HRYVNIA,
         icon="mdi:cash",
     ),
     SensorEntityDescription(
         key="next_write_off_amount",
         name="EuroNet Next Write-off Amount",
-        native_unit_of_measurement=CURRENCY_HRYVNIA,
+        native_unit_of_measurement=UnitOfCurrency.HRYVNIA,
         icon="mdi:currency-uah",
     ),
     SensorEntityDescription(

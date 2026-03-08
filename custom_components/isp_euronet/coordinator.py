@@ -107,8 +107,17 @@ class EuroNetApiClient:
             _LOGGER.error("Auth HTTP error for login=%s: status=%s", self.login, response.status)
             raise EuroNetApiError(f"Authentication failed with HTTP {response.status}")
 
-        result = str(payload.get("result", "")).strip().lower()
-        has_inline_main = isinstance(payload.get("usr"), dict) or isinstance(payload.get("services"), list)
+        raw_result = payload.get("result")
+        result = str(raw_result or "").strip().lower()
+
+        has_inline_main = (
+            isinstance(payload.get("usr"), dict)
+            or isinstance(payload.get("services"), list)
+            or (
+                isinstance(raw_result, dict)
+                and (isinstance(raw_result.get("usr"), dict) or isinstance(raw_result.get("services"), list))
+            )
+        )
 
         if result != "auth ok" and not has_inline_main:
             _LOGGER.warning("Auth rejected for login=%s. %s", self.login, _short_payload(payload))
