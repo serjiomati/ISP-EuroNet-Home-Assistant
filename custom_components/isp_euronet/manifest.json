@@ -5,7 +5,7 @@
     "@codex"
   ],
   "config_flow": true,
-  "documentation": "https://github.com/example/isp-euronet-home-assistant",
+  "documentation": "https://github.com/serjiomati/ISP-EuroNet-Home-Assistant",
   "integration_type": "service",
   "iot_class": "cloud_polling",
   "loggers": [
