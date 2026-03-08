@@ -28,6 +28,13 @@ class EuroNetAuthError(EuroNetApiError):
     """Authentication error for EuroNet API."""
 
 
+def _short_payload(payload: dict[str, Any]) -> str:
+    """Return sanitized payload details for logging."""
+    result = payload.get("result")
+    result_preview = str(result)[:120] if result is not None else "<missing>"
+    return f"keys={list(payload.keys())}, result={result_preview!r}, has_ses={bool(payload.get('ses'))}"
+
+
 @dataclass
 class EuroNetData:
     """Structured data used by sensors."""
@@ -65,11 +72,13 @@ class EuroNetApiClient:
 
     async def _authenticate(self) -> None:
         params = {"_uu": self.login, "_pp": self._password}
+        _LOGGER.debug("Authenticating EuroNet login=%s", self.login)
         async with async_timeout.timeout(15):
             response = await self._session.get(BASE_URL, params=params)
             payload = await self._read_json_payload(response)
 
         if response.status != 200:
+            _LOGGER.error("Auth HTTP error for login=%s: status=%s", self.login, response.status)
             raise EuroNetApiError(f"Authentication failed with HTTP {response.status}")
 
         noses = payload.get("ses")
@@ -77,11 +86,18 @@ class EuroNetApiClient:
 
         # Must follow API contract: auth succeeds only when `result` is auth ok.
         if result != "auth ok":
-            _LOGGER.debug("Auth response for login %s was not auth ok: %s", self.login, result)
+            _LOGGER.warning(
+                "Auth rejected for login=%s. %s",
+                self.login,
+                _short_payload(payload),
+            )
             raise EuroNetAuthError("Authentication failed: invalid credentials")
 
         if not isinstance(noses, str) or not noses:
+            _LOGGER.error("Auth succeeded without session token for login=%s. %s", self.login, _short_payload(payload))
             raise EuroNetApiError("Authentication failed: session token is missing")
+
+        _LOGGER.debug("Auth OK for login=%s, session token received", self.login)
 
         self._noses = noses
         self._expires_at = datetime.utcnow() + timedelta(seconds=SESSION_TTL_SECONDS - 60)
@@ -101,14 +117,16 @@ class EuroNetApiClient:
         cookies = {"noses": self._noses}
         params = {"a": "u_main"}
 
+        _LOGGER.debug("Fetching u_main for login=%s", self.login)
         async with async_timeout.timeout(15):
             response = await self._session.get(BASE_URL, params=params, cookies=cookies)
             payload = await self._read_json_payload(response)
 
         if response.status != 200:
+            _LOGGER.error("u_main HTTP error for login=%s: status=%s", self.login, response.status)
             raise EuroNetApiError(f"Failed to fetch main data with HTTP {response.status}")
 
-        _LOGGER.debug("u_main payload keys for login %s: %s", self.login, list(payload.keys()))
+        _LOGGER.debug("u_main response for login=%s: %s", self.login, _short_payload(payload))
         return payload
 
     async def async_get_main(self) -> EuroNetData:
@@ -144,6 +162,7 @@ class EuroNetApiClient:
             services = []
 
         if not user and not services:
+            _LOGGER.error("u_main payload missing data for login=%s. %s", self.login, _short_payload(payload))
             raise EuroNetApiError("Unexpected API payload: missing user/services data")
 
         return EuroNetData(user=user, services=services)

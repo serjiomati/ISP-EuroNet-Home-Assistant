@@ -8,8 +8,13 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.data_entry_flow import FlowResult
 
+import logging
+
 from .const import CONF_LOGIN, CONF_PASSWORD, DOMAIN
 from .coordinator import EuroNetApiClient, EuroNetApiError, EuroNetAuthError
+
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class EuroNetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -28,12 +33,15 @@ class EuroNetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             client = EuroNetApiClient(self.hass, login=login, password=password)
             try:
                 await client.async_validate_auth()
-            except EuroNetAuthError:
+            except EuroNetAuthError as err:
                 errors["base"] = "auth"
-            except EuroNetApiError:
+                _LOGGER.warning("Config flow auth failed for login=%s: %s", login, err)
+            except EuroNetApiError as err:
                 errors["base"] = "cannot_connect"
-            except Exception:  # noqa: BLE001
+                _LOGGER.error("Config flow API error for login=%s: %s", login, err)
+            except Exception as err:  # noqa: BLE001
                 errors["base"] = "unknown"
+                _LOGGER.exception("Config flow unexpected error for login=%s: %s", login, err)
             else:
                 await self.async_set_unique_id(login)
                 self._abort_if_unique_id_configured()
