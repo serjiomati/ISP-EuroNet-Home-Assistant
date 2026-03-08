@@ -71,14 +71,19 @@ class EuroNetApiClient:
         noses = payload.get("ses")
         result = str(payload.get("result", "")).strip().lower()
 
-        # API contract is unstable: prefer presence of `ses` over exact `result` text.
+        if result != "auth ok":
+            raise EuroNetApiError("Authentication failed: invalid credentials")
+
         if not isinstance(noses, str) or not noses:
-            if "auth" in result and "ok" not in result:
-                raise EuroNetApiError("Authentication failed: invalid credentials")
             raise EuroNetApiError("Authentication failed: session token is missing")
 
         self._noses = noses
         self._expires_at = datetime.utcnow() + timedelta(seconds=SESSION_TTL_SECONDS - 60)
+
+
+    async def async_validate_auth(self) -> None:
+        """Validate user credentials using only the auth endpoint."""
+        await self._authenticate()
 
     async def _ensure_session(self) -> None:
         if self._noses and self._expires_at and datetime.utcnow() < self._expires_at:

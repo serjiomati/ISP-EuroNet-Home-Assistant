@@ -22,12 +22,12 @@ class EuroNetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            login = user_input[CONF_LOGIN]
-            password = user_input[CONF_PASSWORD]
+            login = user_input[CONF_LOGIN].strip()
+            password = user_input[CONF_PASSWORD].strip()
 
             client = EuroNetApiClient(self.hass, login=login, password=password)
             try:
-                await client.async_get_main()
+                await client.async_validate_auth()
             except EuroNetApiError:
                 errors["base"] = "auth"
             except Exception:  # noqa: BLE001
@@ -35,7 +35,10 @@ class EuroNetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             else:
                 await self.async_set_unique_id(login)
                 self._abort_if_unique_id_configured()
-                return self.async_create_entry(title=f"EuroNet {login}", data=user_input)
+                return self.async_create_entry(
+                    title=f"EuroNet {login}",
+                    data={CONF_LOGIN: login, CONF_PASSWORD: password},
+                )
 
         schema = vol.Schema(
             {
