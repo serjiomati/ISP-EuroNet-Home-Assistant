@@ -11,8 +11,14 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
 
-from .const import ATTR_ACCOUNT_NAME, ATTR_SERVICE_DESCRIPTION, ATTR_SERVICE_TITLE
+from .const import (
+    ATTR_ACCOUNT_NAME,
+    ATTR_SERVICE_DESCRIPTION,
+    ATTR_SERVICES,
+    ATTR_SERVICE_TITLE,
+)
 from .coordinator import EuroNetDataUpdateCoordinator
 
 
@@ -27,9 +33,44 @@ def _parse_human_time(value: str | None) -> datetime | None:
     if not value:
         return None
     try:
-        return datetime.strptime(value, "%d.%m.%Y %H:%M")
+        naive_dt = datetime.strptime(value, "%d.%m.%Y %H:%M")
     except ValueError:
         return None
+
+    local_tz = dt_util.DEFAULT_TIME_ZONE
+    if local_tz is None:
+        return naive_dt.replace(tzinfo=dt_util.UTC)
+
+    return naive_dt.replace(tzinfo=local_tz)
+
+
+def _pick_primary_service(services: list[dict[str, Any]]) -> dict[str, Any]:
+    if not services:
+        return {}
+
+    paid_services = [s for s in services if (_to_float(s.get("next_service_price")) or 0) > 0]
+    candidates = paid_services or services
+
+    def sort_key(service: dict[str, Any]) -> tuple[int, float]:
+        service_dt = _parse_human_time(service.get("human_time"))
+        service_ts = service_dt.timestamp() if service_dt else float("inf")
+        return (0 if service_dt else 1, service_ts)
+
+    return sorted(candidates, key=sort_key)[0]
+
+
+def _services_attribute(services: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
+    for service in services:
+        normalized.append(
+            {
+                "title": service.get("title"),
+                "description": service.get("description"),
+                "next_service_price": _to_float(service.get("next_service_price")),
+                "human_time": service.get("human_time"),
+            }
+        )
+    return normalized
 
 
 SENSORS: tuple[SensorEntityDescription, ...] = (
@@ -92,7 +133,7 @@ class EuroNetSensor(CoordinatorEntity[EuroNetDataUpdateCoordinator], SensorEntit
     def native_value(self) -> Any:
         data = self.coordinator.data
         user = data.user
-        service = data.services[0] if data.services else {}
+        service = _pick_primary_service(data.services)
 
         if self.entity_description.key == "balance":
             return _to_float(user.get("balance"))
@@ -106,10 +147,11 @@ class EuroNetSensor(CoordinatorEntity[EuroNetDataUpdateCoordinator], SensorEntit
     def extra_state_attributes(self) -> dict[str, Any]:
         data = self.coordinator.data
         user = data.user
-        service = data.services[0] if data.services else {}
+        service = _pick_primary_service(data.services)
 
         return {
             ATTR_ACCOUNT_NAME: user.get("name"),
             ATTR_SERVICE_TITLE: service.get("title"),
             ATTR_SERVICE_DESCRIPTION: service.get("description"),
+            ATTR_SERVICES: _services_attribute(data.services),
         }

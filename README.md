@@ -41,3 +41,35 @@ entities:
 - Авторизація: `GET /cgi-bin/noapi.pl?_uu=<login>&_pp=<password>`
 - Дані: `GET /cgi-bin/noapi.pl?a=u_main` з cookie `noses=<session>`
 - Частота оновлення в HA: кожні 5 хвилин.
+
+
+## Сучасна 1-card картка (Mushroom)
+
+> Потрібен HACS + `Mushroom Cards`.
+
+```yaml
+type: custom:mushroom-template-card
+entity: sensor.euronet_balance
+primary: "Баланс: {{ states('sensor.euronet_balance') }} грн"
+secondary: >-
+  Списання: {{ states('sensor.euronet_next_write_off_date') }}
+  · {{ states('sensor.euronet_next_write_off_amount') }} грн
+multiline_secondary: true
+icon: mdi:wallet
+icon_color: >-
+  {% set b = states('sensor.euronet_balance') | float(0) %}
+  {{ 'green' if b >= 0 else 'red' }}
+badge_icon: mdi:cash-clock
+badge_color: blue
+```
+
+## Де подивитися всі послуги
+
+У кожного сенсора є атрибут `services` (масив), наприклад:
+
+- `services[].title`
+- `services[].next_service_price`
+- `services[].human_time`
+- `services[].description`
+
+Можна вивести в markdown-картці через шаблон.

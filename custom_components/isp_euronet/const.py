@@ -12,3 +12,4 @@ SESSION_TTL_SECONDS = 7200
 ATTR_ACCOUNT_NAME = "account_name"
 ATTR_SERVICE_TITLE = "service_title"
 ATTR_SERVICE_DESCRIPTION = "service_description"
+ATTR_SERVICES = "services"
