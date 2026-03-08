@@ -24,6 +24,10 @@ class EuroNetApiError(Exception):
     """Base error for EuroNet API."""
 
 
+class EuroNetAuthError(EuroNetApiError):
+    """Authentication error for EuroNet API."""
+
+
 @dataclass
 class EuroNetData:
     """Structured data used by sensors."""
@@ -71,15 +75,15 @@ class EuroNetApiClient:
         noses = payload.get("ses")
         result = str(payload.get("result", "")).strip().lower()
 
+        # Must follow API contract: auth succeeds only when `result` is auth ok.
         if result != "auth ok":
-            raise EuroNetApiError("Authentication failed: invalid credentials")
+            raise EuroNetAuthError("Authentication failed: invalid credentials")
 
         if not isinstance(noses, str) or not noses:
             raise EuroNetApiError("Authentication failed: session token is missing")
 
         self._noses = noses
         self._expires_at = datetime.utcnow() + timedelta(seconds=SESSION_TTL_SECONDS - 60)
-
 
     async def async_validate_auth(self) -> None:
         """Validate user credentials using only the auth endpoint."""

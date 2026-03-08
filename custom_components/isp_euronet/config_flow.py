@@ -9,7 +9,7 @@ from homeassistant import config_entries
 from homeassistant.data_entry_flow import FlowResult
 
 from .const import CONF_LOGIN, CONF_PASSWORD, DOMAIN
-from .coordinator import EuroNetApiClient, EuroNetApiError
+from .coordinator import EuroNetApiClient, EuroNetApiError, EuroNetAuthError
 
 
 class EuroNetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -28,8 +28,10 @@ class EuroNetConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             client = EuroNetApiClient(self.hass, login=login, password=password)
             try:
                 await client.async_validate_auth()
-            except EuroNetApiError:
+            except EuroNetAuthError:
                 errors["base"] = "auth"
+            except EuroNetApiError:
+                errors["base"] = "cannot_connect"
             except Exception:  # noqa: BLE001
                 errors["base"] = "unknown"
             else:

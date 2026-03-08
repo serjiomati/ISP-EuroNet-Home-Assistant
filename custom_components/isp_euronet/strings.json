@@ -12,6 +12,7 @@
     },
     "error": {
       "auth": "Failed to authenticate. Check login/password.",
+      "cannot_connect": "Could not connect to ISP EuroNet API. Try again later.",
       "unknown": "Unexpected error occurred"
     },
     "abort": {
