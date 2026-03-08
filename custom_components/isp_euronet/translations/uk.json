@@ -1,0 +1,21 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "ISP EuroNet",
+        "description": "Введіть ваші облікові дані ISP EuroNet.",
+        "data": {
+          "login": "Логін (_uu)",
+          "password": "Пароль (_pp)"
+        }
+      }
+    },
+    "error": {
+      "auth": "Помилка авторизації. Перевірте логін/пароль.",
+      "unknown": "Сталася неочікувана помилка"
+    },
+    "abort": {
+      "already_configured": "Цей акаунт вже налаштовано"
+    }
+  }
+}
