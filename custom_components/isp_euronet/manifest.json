@@ -1,0 +1,16 @@
+{
+  "domain": "isp_euronet",
+  "name": "ISP EuroNet",
+  "codeowners": [
+    "@codex"
+  ],
+  "config_flow": true,
+  "documentation": "https://github.com/example/isp-euronet-home-assistant",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "loggers": [
+    "custom_components.isp_euronet"
+  ],
+  "requirements": [],
+  "version": "0.1.0"
+}
