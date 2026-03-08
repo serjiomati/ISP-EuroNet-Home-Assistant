@@ -4,11 +4,17 @@
 
 ## Що додає
 
-Після налаштування з'являються 3 сенсори:
+Після налаштування з'являються 3 сенсори (для кожного логіна `_uu`):
 
-1. `sensor.euronet_balance` — активний баланс.
-2. `sensor.euronet_next_write_off_amount` — наступна сума списання.
-3. `sensor.euronet_next_write_off_date` — дата/час наступного списання.
+1. `sensor.isp_euronet_<login>_euronet_balance` — активний баланс.
+2. `sensor.isp_euronet_<login>_euronet_next_write_off_amount` — наступна сума списання.
+3. `sensor.isp_euronet_<login>_euronet_next_write_off_date` — дата/час наступного списання.
+
+Наприклад для логіна `190`:
+
+- `sensor.isp_euronet_190_euronet_balance`
+- `sensor.isp_euronet_190_euronet_next_write_off_amount`
+- `sensor.isp_euronet_190_euronet_next_write_off_date`
 
 ## Налаштування
 
@@ -22,45 +28,58 @@
 
 Інтеграція авторизується, зберігає cookie `noses` і автоматично оновлює сесію кожні ~7200 секунд.
 
-## Приклад віджета (Entities card)
+## Базовий приклад (Entities card)
 
 ```yaml
 type: entities
-title: ISP EuroNet
+title: ISP EuroNet (190)
 entities:
-  - entity: sensor.euronet_balance
+  - entity: sensor.isp_euronet_190_euronet_balance
     name: Баланс
-  - entity: sensor.euronet_next_write_off_amount
+  - entity: sensor.isp_euronet_190_euronet_next_write_off_amount
     name: Наступне списання
-  - entity: sensor.euronet_next_write_off_date
+  - entity: sensor.isp_euronet_190_euronet_next_write_off_date
     name: Дата списання
 ```
 
-## Технічні деталі
-
-- Авторизація: `GET /cgi-bin/noapi.pl?_uu=<login>&_pp=<password>`
-- Дані: `GET /cgi-bin/noapi.pl?a=u_main` з cookie `noses=<session>`
-- Частота оновлення в HA: кожні 5 хвилин.
-
-
-## Сучасна 1-card картка (Mushroom)
+## Сучасна картка (Mushroom, 1 стильний блок)
 
 > Потрібен HACS + `Mushroom Cards`.
 
 ```yaml
-type: custom:mushroom-template-card
-entity: sensor.euronet_balance
-primary: "Баланс: {{ states('sensor.euronet_balance') }} грн"
-secondary: >-
-  Списання: {{ states('sensor.euronet_next_write_off_date') }}
-  · {{ states('sensor.euronet_next_write_off_amount') }} грн
-multiline_secondary: true
-icon: mdi:wallet
-icon_color: >-
-  {% set b = states('sensor.euronet_balance') | float(0) %}
-  {{ 'green' if b >= 0 else 'red' }}
-badge_icon: mdi:cash-clock
-badge_color: blue
+type: vertical-stack
+cards:
+  - type: custom:mushroom-title-card
+    title: ISP EuroNet
+    subtitle: Особовий рахунок 190
+
+  - type: custom:mushroom-template-card
+    entity: sensor.isp_euronet_190_euronet_balance
+    primary: >-
+      Баланс: {{ states('sensor.isp_euronet_190_euronet_balance') }} грн
+    secondary: >-
+      Наступне списання: {{ states('sensor.isp_euronet_190_euronet_next_write_off_date') }}
+      · {{ states('sensor.isp_euronet_190_euronet_next_write_off_amount') }} грн
+    multiline_secondary: true
+    icon: mdi:wallet-outline
+    icon_color: >-
+      {% set b = states('sensor.isp_euronet_190_euronet_balance') | float(0) %}
+      {{ 'green' if b >= 100 else 'amber' if b >= 0 else 'red' }}
+    badge_icon: mdi:cash-clock
+    badge_color: blue
+    tap_action:
+      action: more-info
+
+  - type: custom:mushroom-chips-card
+    chips:
+      - type: template
+        icon: mdi:web
+        content: >-
+          {{ state_attr('sensor.isp_euronet_190_euronet_balance','service_title') or 'Послуга ISP EuroNet' }}
+      - type: template
+        icon: mdi:cash-fast
+        content: >-
+          {{ states('sensor.isp_euronet_190_euronet_next_write_off_amount') }} грн
 ```
 
 ## Де подивитися всі послуги
@@ -72,4 +91,8 @@ badge_color: blue
 - `services[].human_time`
 - `services[].description`
 
-Можна вивести в markdown-картці через шаблон.
+## Технічні деталі
+
+- Авторизація: `GET /cgi-bin/noapi.pl?_uu=<login>&_pp=<password>`
+- Дані: `GET /cgi-bin/noapi.pl?a=u_main` з cookie `noses=<session>`
+- Частота оновлення в HA: кожні 5 хвилин.
